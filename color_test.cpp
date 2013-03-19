@@ -17,11 +17,14 @@
 using namespace cv;
 
 //square globals //, numPts = 3;
-const char* wndname = "Square Detection Demo";
+const char* sqrWnd = "Square Detection";
+const char* triWnd = "Triangle Detection";
+const char* cirWnd = "Circle Detection";
+const char* octWnd = "Octagon Detection";
 
 /// Global variables
-std::vector<int> color_count;
 std::vector<int> shape_count;
+std::vector<std::vector<int> > color_count;
 
 //// Color Fcns ////
 
@@ -34,20 +37,21 @@ void satConversion( const Mat& image, Mat& satImg );
 
 /// Function headers
 int identifySign(string imgName);
+int normSignImg(string imgName, int color, int shape);
 
 /// Find Shape Fcn
 /* Returns the number for the shape */
-int findShape(const Mat& image);
+int findShape(const Mat& image, int color);
 
 ///Square functions
 double angle( Point pt1, Point pt2, Point pt0 );
-int findPoly(const Mat& image, vector<vector<Point> >& squares, int numPts, float ang, int check);
-int findSquares( const Mat& image, vector<vector<Point> >& squares, int numPts, float ang, int check );
-void drawSquares( Mat& image, const vector<vector<Point> >& squares );
+int findPoly(const Mat image, vector<vector<Point> >& squares, int numPts, float ang, int check);
+int findSquares( const Mat image, vector<vector<Point> >& squares, int numPts, float ang, int check );
+void drawSquares( Mat image, const vector<vector<Point> >& squares, int numPts );
 
 ///Circle Funtions
-int findCircles(const Mat& image, vector<Vec3f>& circles );
-void drawCircles(Mat& image, const vector<Vec3f>& circles );
+int findCircles(const Mat image, vector<Vec3f>& circles );
+void drawCircles(Mat image, const vector<Vec3f>& circles );
 
 ///Print Functions
 void printUsage() {
@@ -73,8 +77,14 @@ int main( int argc, char** argv )
         std::ifstream filename(argv[1]);
         
         //// init color count
-        for (int i=0; i<4; i++) {
-            color_count.push_back(0);
+        for (int i=0; i<5; i++) {
+            
+            std::vector<int> shape_c;
+            //// init shape count
+            for (int j=0; j<5; j++) {
+                shape_c.push_back(0);
+            }
+            color_count.push_back(shape_c);
         }
         //// init shape count
         for (int i=0; i<5; i++) {
@@ -86,7 +96,7 @@ int main( int argc, char** argv )
         
         std::vector<std::string> known_colors(k_col, k_col + sizeof(k_col)/sizeof(k_col[0]));
         std::vector<std::string> known_shapes(k_sha, k_sha + sizeof(k_sha)/sizeof(k_sha[0]));
-        
+        std::vector<std::string> imgNames;
         if (filename.is_open()){
             
             //**//std::cout << "File opened correctly" << std::endl;
@@ -111,31 +121,54 @@ int main( int argc, char** argv )
                 /** STORE DATA **/
                 if (numF!=0 /*&& numF < 50 && numF%2 == 0*/){ //16 for error checking
                     //init variables
-                    
-                    std::string imgName = path + data[0]; //jpg
-                    //**//std::cout << imgName << std::endl;
-                    int retVal;
-                    retVal = identifySign(imgName);
-                    if (retVal < 0){
-                        //sign detection error
-                        //**//std::cout << "error detecting sign or not able to classify sign" << std::endl;
-                        int t = 0; //useless
+                    if (data[0].size() > 4){
+                        std::string imgName = path + data[0]; //jpg
+                        imgNames.push_back(imgName);
+                        //**//std::cout << imgName << std::endl;
+                        int retVal;
+                        retVal = identifySign(imgName);
+                        if (retVal < 0){
+                            //sign detection error
+                            //**//std::cout << "error detecting sign or not able to classify sign" << std::endl;
+                            int t = 0; //useless
+                        }
+                        else
+                            //waitKey(0);
+                            int t = 0; //useless
                     }
-                    else
-                        //waitKey(0);
-                        int t = 0; //useless
-                    
                 }
                 numF++; //counts the number of lines
             }
             filename.close();
             
-            float tot = numF - 1;
+            //find max color
+            int maxCol = 0, maxSha = 0, maxCnt=0;
+            
+            for (std::vector< std::vector<int> >::size_type u = 0; u < color_count.size()-1; u++) {
+                for (std::vector<int>::size_type v = 0; v < color_count[u].size()-1; v++) {
+                    if (color_count[u][v] > maxCnt) {
+                        maxCnt = color_count[u][v];
+                        maxCol = u;
+                        maxSha = v;
+                    }
+                    //std::cout << "[" << color_count[u][v] << "]";
+                }
+                //std::cout << std::endl;
+            }
+            
+            // ** Print Results ** 
+            std::cout << known_colors[maxCol] << "," << known_shapes[maxSha] << std::endl; //
+            
+            //std::cout << "\nRESULTS" << std::endl;
+            //std::cout << "-color: " << known_colors[ maxCol ] << std::endl;
+            //std::cout << "-shape: " << known_shapes[ maxSha ] << std::endl;
+            //std::cout << maxCol << "," << maxSha << std::endl;
+            /*float tot = numF - 1;
             std::cout << "\nCOLOR" << std::endl;
             
             for (int j=0; j<5; j++) {
                 if (color_count[j] != 0){
-                    std::cout << known_colors[j] << ": " << color_count[j] /*/(tot)*100 << "%" */ << std::endl;
+                    std::cout << known_colors[j] << ": " << color_count[j]  << std::endl;
                 }
                 else {
                     std::cout << known_colors[j] << ": 0.00%" << std::endl;
@@ -144,13 +177,17 @@ int main( int argc, char** argv )
             std::cout << "\nSHAPE" << std::endl;
             for (int j=0; j<5; j++) {
                 if (shape_count[j] != 0 ){
-                    std::cout << known_shapes[j] << ": " << shape_count[j]/*/(tot)*100 << "%"*/ << std::endl;
+                    std::cout << known_shapes[j] << ": " << shape_count[j] << std::endl;
                 }
                 else {
                     std::cout << known_shapes[j] << ": 0.00" << std::endl;
                     
                 }
-            }
+            } */ /*
+            for (int j=0; j<imgNames.size(); j++) {
+                //std::cout<<imgNames[j]<<std::endl; //for error checking
+                normSignImg(imgNames[j], maxCol, maxSha); //fcn call
+            } */
         }
         else {
             std::cerr << "Unable to open file" << std::endl;
@@ -158,8 +195,6 @@ int main( int argc, char** argv )
         }
     
     }
-        
-    
     
     return 0;
 }
@@ -183,6 +218,15 @@ int identifySign(string imgName){
     
     return normColor(img_hsv);
     
+}
+
+/*/ the function creates a new cropped and normalized image of the sign feature
+    each sign is resized to 50 x 50 x 50
+
+/*/
+int normSignImg(string imgName, int color, int shape){
+    
+    return 0;
 }
 
 /*/ the function creates a new color biased image for each known color by multiplying a converted hue and saturation image to each and normalizing the result to the max value 255.
@@ -254,11 +298,11 @@ int normColor( const Mat& image ){
         normImg[i] = satImg.mul(colorImg[i]);
         //When the norm is minmax, cv::normalize normalizes _src in such a way that the min value of dst is alpha and max value of dst is beta
         //alternatively could use dtype=CV_8UC1, for an 8 bit unsigned single channel
-        normalize( normImg[i], normImg[i], alpha, beta, norm_type, dtype);
+        normalize( normImg[i], normImg[i], alpha, beta, norm_type/*, dtype*/);
     }
     
     //show normalized images
-    /*
+    
     namedWindow( "IMG - Red", CV_WINDOW_NORMAL );
     imshow( "IMG - Red", normImg[0]);
     
@@ -276,28 +320,29 @@ int normColor( const Mat& image ){
     
     //find
     
-    waitKey(0);
+    //waitKey(0);
+    /*
     destroyWindow("IMG - Red");
     destroyWindow("IMG - Blue");
     destroyWindow("IMG - Yellow");
-    destroyWindow("IMG - Black");
+    destroyWindow("IMG - Black"); */
     //destroyWindow("IMG - Saturation");
-    */
+    
     
     int colorFound=0; //if a shape if found for this image
     int retVal = 0;
     for (int i=0; i<4; i++) {
-        //**//std::cout <<  "Which: " << i <<  std::endl;
-        retVal = findShape(normImg[i]);
-        if (retVal == 1) {
+        //**/std::cout <<  "Which Color: " << i <<  std::endl;
+        retVal = findShape(normImg[i], i);
+        if (retVal > 1) {
             colorFound ++;
-            color_count[i] ++;
+            //color_count[i][retVal] ++;
         }
-    }
+    } /*
     if (colorFound < 1) { //unknown
 
         color_count[4] ++;
-    }
+    } */
     
     return colorFound;
 }
@@ -450,7 +495,7 @@ void satConversion( const Mat& image, Mat& satImg ) {
     return;
 }
 
-int findShape(const Mat& image){
+int findShape(const Mat& image, int color){
     
     //**//std::cout << "Shape Fcn" << std::endl;
     /****DETECT SHAPE****/
@@ -459,54 +504,62 @@ int findShape(const Mat& image){
     vector<vector<Point> > squares;
     vector<Vec3f> circles;
     
-    Mat img_shape;
-    image.copyTo(img_shape);
+    Mat img_sqr, img_oct, img_tri, img_cir, img_shape;
+    image.copyTo(img_sqr);
+    image.copyTo(img_oct);
+    image.copyTo(img_tri);
+    image.copyTo(img_cir);
     
     //**//std::cout << "Shape Fcn 1" << std::endl;
-    num_SQ = findPoly(img_shape, squares, 4, .3, 1);
+    num_SQ = findPoly(img_sqr, squares, 4, 1/*.3*/, 1);
     //**//std::cout << "Shape Fcn 2" << std::endl;
-    numOCT = findPoly(img_shape, squares, 8, 1, 0);
+    numOCT = findPoly(img_oct, squares, 8, 1, 0);
     //**//std::cout << "Shape Fcn 3" << std::endl;
-    numTRI = findPoly(img_shape, squares, 4, 1, 0);
+    numTRI = findPoly(img_tri, squares, 3, 1, 0);
     //**//std::cout << "Shape Fcn 4" << std::endl;
-    numCir = findCircles(img_shape, circles);
+    numCir = findCircles(img_cir, circles);
     
     if (num_SQ > 0) {
         //detected squares
-        //**//std::cout << "Shape: SQR" << std::endl;
+        //**/std::cout << "Shape: SQR" << std::endl;
         shape_count[0] ++;
-        drawSquares(img_shape, squares);
+        color_count[color][0] ++;
+        //drawSquares(img_sqr, squares, 4);
     } else {
         
     }
     if (numOCT > 0) {
         //detect octagons
-        //**//std::cout << "Shape: OCT" << std::endl;
+        //**/std::cout << "Shape: OCT" << std::endl;
         shape_count[1] ++;
-        drawSquares(img_shape, squares);
+        color_count[color][1] ++;
+        //drawSquares(img_oct, squares, 8);
     } else {
         
     }
     if (numTRI) {
         //detect triangles
-        //**//std::cout << "Shape: TRI" << std::endl;
+        //**/std::cout << "Shape: TRI" << std::endl;
         shape_count[2] ++;
-        drawSquares(img_shape, squares);
+        color_count[color][2] ++;
+        //drawSquares(img_tri, squares, 3);
     } else {
         
     }
     if (numCir) {
         //detect circles
-        //**//std::cout << "Shape: CIR" << std::endl;
+        //**/std::cout << "Shape: CIR" << std::endl;
         shape_count[3] ++;
-        drawCircles(img_shape, circles);
+        color_count[color][3] ++;
+        //drawCircles(img_cir, circles);
     } else {
         
     }
     if (num_SQ ==0 && numOCT ==0 && numTRI ==0 && numCir==0) {
         //detect no shapes
-        //**//std::cout << "Shape: UNK" << std::endl;
+        //**/std::cout << "Shape: UNK" << std::endl;
         shape_count[4] ++;
+        color_count[color][4] ++;
         return -1;
     }
     
@@ -522,7 +575,7 @@ double angle( Point pt1, Point pt2, Point pt0 )
     return (dx1*dx2 + dy1*dy2)/sqrt((dx1*dx1 + dy1*dy1)*(dx2*dx2 + dy2*dy2) + 1e-10);
 }
 
-int findPoly(const Mat& image, vector<vector<Point> >& squares, int numPts, float ang, int check)
+int findPoly(const Mat image, vector<vector<Point> >& squares, int numPts, float ang, int check)
 {
     squares.clear();
     Mat gray;
@@ -558,9 +611,9 @@ int findPoly(const Mat& image, vector<vector<Point> >& squares, int numPts, floa
             // area may be positive or negative - in accordance with the
             // contour orientation
             //std::cout << "Poly Find 3" << std::endl;
-            if( approx.size() == numPts &&
-               fabs(contourArea(Mat(approx))) > 1000 &&
-               isContourConvex(Mat(approx)) && shapeArea < (float)image.rows*image.cols*.75)
+            if( approx.size() == numPts /* &&
+               fabs(contourArea(Mat(approx))) > 1000 */ && 
+               isContourConvex(Mat(approx)) && shapeArea < (float)image.rows*image.cols*.75 && shapeArea > (float)image.rows*image.cols*.2) //shape area between 20 and 75 percent of image area
             {
                 double maxCosine = 0;
                 for( int j = 2; j < numPts+1; j++ )
@@ -589,7 +642,7 @@ int findPoly(const Mat& image, vector<vector<Point> >& squares, int numPts, floa
 
 // returns sequence of squares detected on the image.
 // the sequence is stored in the specified memory storage
-int findSquares( const Mat& image, vector<vector<Point> >& squares, int numPts, float ang, int check )
+int findSquares( const Mat image, vector<vector<Point> >& squares, int numPts, float ang, int check )
 {
     
     int thresh = 50, N = 11;
@@ -661,7 +714,7 @@ int findSquares( const Mat& image, vector<vector<Point> >& squares, int numPts, 
     return squares.size();
 }
 // the function draws all the squares in the image
-void drawSquares( Mat& image, const vector<vector<Point> >& squares )
+void drawSquares( Mat image, const vector<vector<Point> >& squares, int numPts )
 {
     for( size_t i = 0; i < squares.size(); i++ )
     {
@@ -669,11 +722,26 @@ void drawSquares( Mat& image, const vector<vector<Point> >& squares )
         int n = (int)squares[i].size();
         polylines(image, &p, &n, 1, true, Scalar(0,255,0), 3, CV_AA);
     }
+    if (numPts == 3) {
+        namedWindow( triWnd, CV_WINDOW_NORMAL );
+        imshow(triWnd, image);
+        waitKey(0);
+        destroyWindow(triWnd);
+    } else if (numPts == 4) {
+        namedWindow( sqrWnd, CV_WINDOW_NORMAL );
+        imshow(sqrWnd, image);
+        waitKey(0);
+        destroyWindow(sqrWnd);
+    } else if (numPts == 8) {
+        namedWindow( octWnd, CV_WINDOW_NORMAL );
+        imshow(octWnd, image);
+        waitKey(0);
+        destroyWindow(octWnd);
+    }
     
-    imshow(wndname, image);
     return;
 }
-int findCircles(const Mat& image, vector<Vec3f>& circles ){
+int findCircles(const Mat image, vector<Vec3f>& circles ){
 
     circles.clear();
     /// Convert it to gray
@@ -683,10 +751,11 @@ int findCircles(const Mat& image, vector<Vec3f>& circles ){
     
     /// Reduce the noise so we avoid false circle detection
     GaussianBlur( img_gray, img_gray, Size(9, 9), 2, 2 );
-    HoughCircles( img_gray, circles, CV_HOUGH_GRADIENT, 1, img_gray.rows/2, 200, 30, 1, 200);
+    HoughCircles( img_gray, circles, CV_HOUGH_GRADIENT, 1, img_gray.rows/2, 200, 30, img_gray.rows/4, img_gray.rows/2);
+    //HoughCircles( img_gray, circles, CV_HOUGH_GRADIENT, 1, img_gray.rows/2, 200, 30, 1, 200);
     return circles.size();
 }
-void drawCircles(Mat& image, const vector<Vec3f>& circles ){
+void drawCircles(Mat image, const vector<Vec3f>& circles ){
     
     /// Draw the circles detected
     for( size_t i = 0; i < circles.size(); i++ )
@@ -699,7 +768,9 @@ void drawCircles(Mat& image, const vector<Vec3f>& circles ){
         circle( image, center, radius, Scalar(0,0,255), 3, 8, 0 );
     }
     /// Show your results
-    namedWindow( wndname, CV_WINDOW_AUTOSIZE );
-    imshow( wndname, image );
+    namedWindow( cirWnd, CV_WINDOW_NORMAL );
+    imshow( cirWnd, image );
+    waitKey(0);
+    destroyWindow(octWnd);
     return;
 }
